@@ -25,6 +25,8 @@
 
 #include <g2o/types/slam3d/edge_se3.h>
 #include <g2o/types/slam3d/vertex_se3.h>
+#include <g2o/types/slam3d/edge_se3_prior.h>
+#include "g2o/edge_se3_priorquat.hpp"
 
 namespace hdl_graph_slam {
 
@@ -339,6 +341,27 @@ private:
       ofs << "VERTEX_SE3:QUAT " << i << " ";
       v->write(ofs);
       ofs << std::endl;
+
+
+      // Set orientation prior - daniel
+      const Eigen::Isometry3d imuPrior = Eigen::Isometry3d::Identity(); // assumed that IMU that has already been used to transform the point cloud - IMU measurement is hence implicit and equal to identity rotation
+
+      const double inf_small = 0.00000000001;
+      const double pitch_inf = 1.0/(0.001*0.001); // std dev = 0.001. variance = 0.001^2
+      const double roll_inf = 1.0/(0.001*0.001);
+      Eigen::Matrix<double,6,1> variances;
+      variances <<inf_small, inf_small, inf_small, roll_inf, pitch_inf, inf_small;
+
+      const Eigen::MatrixXd information_matrix = variances.asDiagonal();
+      std::unique_ptr<g2o::EdgeSE3Prior> prior(new g2o::EdgeSE3Prior()); // imu prior
+      prior->setMeasurement(imuPrior);
+      prior->setInformation(information_matrix);
+      prior->vertices()[0] = v.get();
+      ofs << std::fixed << "EDGE_SE3_PRIOR " << i << " ";
+      prior->write(ofs);
+      ofs << std::endl;
+
+
     }
     ofs << "FIX 0" << std::endl;
 
@@ -355,6 +378,8 @@ private:
       ofs << "EDGE_SE3:QUAT " << i << " " << i + 1 << " ";
       e->write(ofs);
       ofs << std::endl;
+
+
     }
 
     ofs.close();
