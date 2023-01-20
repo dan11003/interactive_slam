@@ -346,7 +346,7 @@ private:
       // Set orientation prior - daniel
       const Eigen::Isometry3d imuPrior = Eigen::Isometry3d::Identity(); // assumed that IMU that has already been used to transform the point cloud - IMU measurement is hence implicit and equal to identity rotation
 
-      const double inf_small = 0.00000000001;
+      const double inf_small = 0.000000001;
       const double pitch_inf = 1.0/(0.001*0.001); // std dev = 0.001. variance = 0.001^2
       const double roll_inf = 1.0/(0.001*0.001);
       Eigen::Matrix<double,6,1> variances;
@@ -357,7 +357,7 @@ private:
       prior->setMeasurement(imuPrior);
       prior->setInformation(information_matrix);
       prior->vertices()[0] = v.get();
-      ofs << std::fixed << "EDGE_SE3_PRIOR " << i << " ";
+      ofs << std::setprecision(10) << "EDGE_SE3_PRIOR " << i << " ";
       prior->write(ofs);
       ofs << std::endl;
 
