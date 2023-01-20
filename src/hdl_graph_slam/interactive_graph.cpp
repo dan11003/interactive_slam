@@ -41,6 +41,7 @@ InteractiveGraph::~InteractiveGraph() {
 
 bool InteractiveGraph::load_map_data(const std::string& directory, guik::ProgressInterface& progress) {
   // load graph file
+    std::cout << "bool InteractiveGraph::load_map_data(const std::string& directory, guik::ProgressInterface& progress)"  << std::endl;
   progress.set_title("Opening " + directory);
   progress.set_text("loading graph");
   if(!load(directory + "/graph.g2o")) {

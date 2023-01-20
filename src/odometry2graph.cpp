@@ -269,6 +269,12 @@ private:
       frames.push_back(frame);
     }
   }
+  Eigen::Isometry3d CreateIsometry3d(const Eigen::Quaterniond& q, const Eigen::Vector3d& t) {
+    Eigen::Isometry3d mat = Eigen::Isometry3d::Identity();
+    mat.translation() = t;
+    mat.linear() = q.toRotationMatrix();
+    return mat;
+  }
 
   void load_yokozuka(guik::ProgressInterface& progress, const std::string& directory) {
     progress.set_text("loading graph structure");
@@ -336,6 +342,7 @@ private:
 
     for(int i = 0; i < keyframes.size(); i++) {
       std::unique_ptr<g2o::VertexSE3> v(new g2o::VertexSE3());
+      v->setId(i);
       v->setEstimate(keyframes[i]->pose);
 
       ofs << "VERTEX_SE3:QUAT " << i << " ";
@@ -344,25 +351,76 @@ private:
 
 
       // Set orientation prior - daniel
-      const Eigen::Isometry3d imuPrior = Eigen::Isometry3d::Identity(); // assumed that IMU that has already been used to transform the point cloud - IMU measurement is hence implicit and equal to identity rotation
+      // 2035                                         // EDGE_SE3_PRIOR observed_vertex_id offset_parameter_id x y z qx qy qz qw inf_11 inf_12 .. inf_16 inf_22 .. inf_66 http://docs.ros.org/en/kinetic/api/rtabmap/html/OptimizerG2O_8cpp_source.html
 
-      const double inf_small = 0.000000001;
+      /*const Eigen::Isometry3d imuPrior = Eigen::Isometry3d::Identity(); // assumed that IMU that has already been used to transform the point cloud - IMU measurement is hence implicit and equal to identity rotation
+
+      const double inf_small = 0.0000001;
       const double pitch_inf = 1.0/(0.001*0.001); // std dev = 0.001. variance = 0.001^2
       const double roll_inf = 1.0/(0.001*0.001);
       Eigen::Matrix<double,6,1> variances;
-      variances <<inf_small, inf_small, inf_small, roll_inf, pitch_inf, inf_small;
+      variances <<1, 1, 1, 1, 1, 1;//<<inf_small, inf_small, inf_small, roll_inf, pitch_inf, inf_small;
 
       const Eigen::MatrixXd information_matrix = variances.asDiagonal();
       std::unique_ptr<g2o::EdgeSE3Prior> prior(new g2o::EdgeSE3Prior()); // imu prior
       prior->setMeasurement(imuPrior);
       prior->setInformation(information_matrix);
-      prior->vertices()[0] = v.get();
-      ofs << std::setprecision(10) << "EDGE_SE3_PRIOR " << i << " ";
+      prior->setVertex(0, v.get());
+      prior->setParameterId(0,i);*/
+
+
+/*std::setprecision(10) <<*/
+      /*
+       * ofs << "EDGE_SE3_PRIOR "  << " ";
       prior->write(ofs);
       ofs << std::endl;
+     */
 
 
     }
+    // Generate Fake vertices
+    std::cout << "// Generate Fake vertices" << std::endl;
+    for(int fake_id = keyframes.size(); fake_id < 2*keyframes.size(); fake_id++) {
+        std::cout <<"1 - " << fake_id  << std::endl;
+        ofs << "FIX "<<fake_id << std::endl;
+
+        const int actual_id = fake_id - keyframes.size();
+        std::cout <<"actual id " << actual_id  << std::endl;
+        // Add extra "fake" Vertex
+        std::unique_ptr<g2o::VertexSE3> v(new g2o::VertexSE3());
+        Eigen::Isometry3d fix_pose = keyframes[actual_id]->pose;
+        fix_pose.translation()(2) -= 15;
+        fix_pose.linear() = Eigen::Matrix3d::Identity();
+        v->setId(fake_id);
+        v->setEstimate(fix_pose);
+        //Print
+        ofs << "VERTEX_SE3:QUAT " << fake_id << " ";
+        v->write(ofs);
+        ofs << std::endl;
+
+
+        // Add extra constraint to mimic IMU constriants
+        std::unique_ptr<g2o::EdgeSE3> e(new g2o::EdgeSE3());
+
+        Eigen::Isometry3d constraint = Eigen::Isometry3d::Identity();
+        constraint.translation()(2) -= 10;
+        e->setMeasurement(constraint); //should be the same
+
+        const double inf_small = 0.0000001;
+        const double pitch_inf = 1.0/(0.0001*0.0001); // std dev = 0.001. variance = 0.001^2
+        const double roll_inf = 1.0/(0.0001*0.0001);
+        Eigen::Matrix<double,6,1> variances;
+        variances <<inf_small, inf_small, inf_small, pitch_inf, pitch_inf, inf_small;//however we ignore almost 4 paramers to du infinite high uncertainty
+        Eigen::MatrixXd inf = variances.asDiagonal();
+
+        e->setInformation(inf);
+        ofs << std::fixed << std::setprecision(10) << "EDGE_SE3:QUAT " << actual_id << " " << fake_id << " ";
+        e->write(ofs);
+        ofs << std::endl;
+    }
+
+
+
     ofs << "FIX 0" << std::endl;
 
     for(int i = 0; i < keyframes.size() - 1; i++) {
@@ -449,8 +507,8 @@ public:
     version_modal.reset(new VersionModal());
 
     delta_updated = false;
-    keyframe_delta_x = 3.0f;
-    keyframe_delta_angle = 1.0f;
+    keyframe_delta_x = 0.1f;
+    keyframe_delta_angle = 0.1f;
     downsample_resolution = 0.2f;
 
     return true;
